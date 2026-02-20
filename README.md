@@ -7,11 +7,11 @@ A fast, lightweight, and cross-platform hardware information CLI tool written in
 ## ✨ Features
 
 - **📊 Comprehensive Discovery**:
-    - **CPU**: Model, physical cores, frequency, and real-time usage.
-    - **RAM**: Main memory and Swap usage analysis.
-    - **Storage**: Mount points, total/used space, and filesystem types.
-    - **Network**: Interface MAC addresses and total data transferred.
-    - **System Summary**: OS version, Kernel version, Hostname, and Uptime.
+  - **CPU**: Model, physical cores, frequency, and real-time usage.
+  - **RAM**: Main memory and Swap usage analysis.
+  - **Storage**: Mount points, total/used space, and filesystem types.
+  - **Network**: Interface MAC addresses and total data transferred.
+  - **System Summary**: OS version, Kernel version, Hostname, and Uptime.
 - **🎨 Visual Excellence**: Professional terminal tables with semantic color coding (Green/Yellow/Red) based on usage thresholds.
 - **🛠️ Highly Customizable**: Define your own warning and critical thresholds via a YAML configuration file.
 - **📁 Multiple Output Formats**: Supports `Table` (default), `JSON`, and `YAML`.
@@ -35,24 +35,29 @@ The binary will be available at `./target/release/hw-checker`.
 ### Usage
 
 Run the tool to see a full system report:
+
 ```bash
 cargo run -- --format table
 ```
 
 #### Filtering Components
+
 ```bash
 # Show only CPU and RAM
 cargo run -- --cpu --ram
 ```
 
 #### Exporting Data
+
 ```bash
 # Export as JSON
 cargo run -- --format json > report.json
 ```
 
 #### Using Custom Thresholds
+
 Create a `config.yaml` file:
+
 ```yaml
 cpu_thresholds:
   warning: 80.0
@@ -61,7 +66,9 @@ ram_thresholds:
   warning: 75.0
   critical: 90.0
 ```
+
 Run with the config:
+
 ```bash
 cargo run -- --config config.yaml
 ```
