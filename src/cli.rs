@@ -43,6 +43,10 @@ pub struct Args {
     /// Show full information (all filters enabled)
     #[arg(long, aliases = ["all"])]
     pub full: bool,
+
+    /// Launch interactive Terminal User Interface (TUI)
+    #[arg(long)]
+    pub tui: bool,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]

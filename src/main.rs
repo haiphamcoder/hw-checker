@@ -8,6 +8,7 @@ use hw_checker::formatter::{
     print_cpu, print_health, print_network, print_pci, print_ram, print_report, print_storage,
     print_usb,
 };
+use hw_checker::tui::run_tui;
 
 fn main() -> Result<()> {
     let args = Args::parse();
@@ -19,6 +20,11 @@ fn main() -> Result<()> {
     };
 
     let report = get_hardware_report();
+
+    if args.tui {
+        run_tui(report)?;
+        return Ok(());
+    }
 
     if args.format == OutputFormat::Table {
         let any_filter = args.cpu
