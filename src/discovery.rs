@@ -4,6 +4,7 @@ use crate::model::{
 };
 use raw_cpuid::CpuId;
 use rusb::UsbContext;
+use smbioslib::{SMBiosMemoryDevice, table_load_from_device};
 use std::fs;
 use sysinfo::{CpuRefreshKind, Disks, Networks, RefreshKind, System};
 
@@ -41,15 +42,16 @@ pub fn get_hardware_report() -> HardwareReport {
         })
         .collect();
 
+    let (ram_manufacturer, ram_part, ram_sn) = get_ram_details();
     let ram_info = RamInfo {
         total: sys.total_memory(),
         used: sys.used_memory(),
         free: sys.free_memory(),
         swap_total: sys.total_swap(),
         swap_used: sys.used_swap(),
-        manufacturer: None,
-        part_number: None,
-        serial_number: None,
+        manufacturer: ram_manufacturer,
+        part_number: ram_part,
+        serial_number: ram_sn,
     };
 
     let disks = Disks::new_with_refreshed_list();
@@ -104,6 +106,39 @@ pub fn get_hardware_report() -> HardwareReport {
         motherboard,
         battery,
     }
+}
+
+fn get_ram_details() -> (Option<String>, Option<String>, Option<String>) {
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(data) = table_load_from_device() {
+            // smbioslib provides a way to find first structure of a type
+            if let Some(memory_device) = data.find_map(|mb: SMBiosMemoryDevice| Some(mb)) {
+                let manufacturer = format!("{}", memory_device.manufacturer());
+                let part_number = format!("{}", memory_device.part_number());
+                let serial_number = format!("{}", memory_device.serial_number());
+
+                let clean = |s: String| {
+                    if s.is_empty()
+                        || s.to_lowercase() == "unknown"
+                        || s.to_lowercase() == "none"
+                        || s.to_lowercase() == "not specified"
+                        || s.to_lowercase().contains("empty")
+                        || s == "0"
+                    {
+                        None
+                    } else {
+                        Some(s)
+                    }
+                };
+
+                if let Some(m) = clean(manufacturer) {
+                    return (Some(m), clean(part_number), clean(serial_number));
+                }
+            }
+        }
+    }
+    (None, None, None)
 }
 
 fn get_disk_metadata(name: &str) -> (Option<String>, Option<String>, Option<String>) {

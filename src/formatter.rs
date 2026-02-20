@@ -93,6 +93,7 @@ pub fn print_ram(ram: &crate::model::RamInfo, thresholds: &Thresholds) {
             "Used (MiB)",
             "Free (MiB)",
             "Usage (%)",
+            "Manufacturer/Part#",
         ]);
 
     let ram_usage = (ram.used as f32 / ram.total as f32) * 100.0;
@@ -104,12 +105,19 @@ pub fn print_ram(ram: &crate::model::RamInfo, thresholds: &Thresholds) {
         Color::Green
     };
 
+    let ram_details = match (&ram.manufacturer, &ram.part_number) {
+        (Some(m), Some(p)) => format!("{} ({})", m, p),
+        (Some(m), None) => m.clone(),
+        (None, _) => "Unknown (Run with sudo for DMI)".to_string(),
+    };
+
     table.add_row(vec![
         Cell::new("Main Memory"),
         Cell::new((ram.total / 1024 / 1024).to_string()),
         Cell::new((ram.used / 1024 / 1024).to_string()),
         Cell::new((ram.free / 1024 / 1024).to_string()),
         Cell::new(format!("{:.1}", ram_usage)).fg(ram_color),
+        Cell::new(ram_details),
     ]);
 
     let swap_usage = if ram.swap_total > 0 {
@@ -123,6 +131,7 @@ pub fn print_ram(ram: &crate::model::RamInfo, thresholds: &Thresholds) {
         Cell::new((ram.swap_used / 1024 / 1024).to_string()),
         Cell::new(((ram.swap_total - ram.swap_used) / 1024 / 1024).to_string()),
         Cell::new(format!("{:.1}", swap_usage)),
+        Cell::new("N/A"),
     ]);
 
     println!("{table}");
