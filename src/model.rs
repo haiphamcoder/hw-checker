@@ -14,15 +14,21 @@ pub struct CpuInfo {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RamStick {
+    pub manufacturer: Option<String>,
+    pub part_number: Option<String>,
+    pub serial_number: Option<String>,
+    pub speed: Option<u16>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RamInfo {
     pub total: u64,
     pub used: u64,
     pub free: u64,
     pub swap_total: u64,
     pub swap_used: u64,
-    pub manufacturer: Option<String>,
-    pub part_number: Option<String>,
-    pub serial_number: Option<String>,
+    pub sticks: Vec<RamStick>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

@@ -1,10 +1,10 @@
 use crate::model::{
     BatteryInfo, CpuInfo, HardwareReport, MotherboardInfo, NetworkInfo, PciDevice, RamInfo,
-    StorageInfo, UsbDevice,
+    RamStick, StorageInfo, UsbDevice,
 };
 use raw_cpuid::CpuId;
 use rusb::UsbContext;
-use smbioslib::{SMBiosMemoryDevice, table_load_from_device};
+use smbioslib::table_load_from_device;
 use std::fs;
 use sysinfo::{CpuRefreshKind, Disks, Networks, RefreshKind, System};
 
@@ -42,16 +42,14 @@ pub fn get_hardware_report() -> HardwareReport {
         })
         .collect();
 
-    let (ram_manufacturer, ram_part, ram_sn) = get_ram_details();
+    let ram_sticks = get_ram_details();
     let ram_info = RamInfo {
         total: sys.total_memory(),
         used: sys.used_memory(),
         free: sys.free_memory(),
         swap_total: sys.total_swap(),
         swap_used: sys.used_swap(),
-        manufacturer: ram_manufacturer,
-        part_number: ram_part,
-        serial_number: ram_sn,
+        sticks: ram_sticks,
     };
 
     let disks = Disks::new_with_refreshed_list();
@@ -108,37 +106,88 @@ pub fn get_hardware_report() -> HardwareReport {
     }
 }
 
-fn get_ram_details() -> (Option<String>, Option<String>, Option<String>) {
+fn get_ram_details() -> Vec<RamStick> {
+    let mut sticks = Vec::new();
     #[cfg(target_os = "linux")]
     {
+        use smbioslib::{SMBiosMemoryDevice, SMBiosStruct};
+
         if let Ok(data) = table_load_from_device() {
-            // smbioslib provides a way to find first structure of a type
-            if let Some(memory_device) = data.find_map(|mb: SMBiosMemoryDevice| Some(mb)) {
-                let manufacturer = format!("{}", memory_device.manufacturer());
-                let part_number = format!("{}", memory_device.part_number());
-                let serial_number = format!("{}", memory_device.serial_number());
+            for sm_struct in data.iter() {
+                if sm_struct.header.struct_type() == 17 {
+                    let dev = SMBiosMemoryDevice::new(sm_struct);
 
-                let clean = |s: String| {
-                    if s.is_empty()
-                        || s.to_lowercase() == "unknown"
-                        || s.to_lowercase() == "none"
-                        || s.to_lowercase() == "not specified"
-                        || s.to_lowercase().contains("empty")
-                        || s == "0"
-                    {
-                        None
-                    } else {
-                        Some(s)
+                    let manufacturer_raw = format!("{}", dev.manufacturer());
+                    let part_number = format!("{}", dev.part_number());
+                    let serial_number = format!("{}", dev.serial_number());
+
+                    // speed is a u16 inside the struct, let's try to get it safely
+                    // SMBiosMemoryDevice fields are usually private but accessible via methods
+                    // configured_memory_speed() returns Option<MemorySpeed> in 0.9.x
+                    // MemorySpeed is likely a wrapper of u16
+                    let speed = dev.configured_memory_speed().map(|s| {
+                        // Fallback: format it and parse if we can't find a better way
+                        let s_str = format!("{:?}", s);
+                        // s_str is likely "MemorySpeed(3200)" or similar
+                        s_str
+                            .chars()
+                            .filter(|c| c.is_digit(10))
+                            .collect::<String>()
+                            .parse::<u16>()
+                            .unwrap_or(0)
+                    });
+
+                    let clean = |s: String| {
+                        let t = s.trim();
+                        if t.is_empty()
+                            || t.to_lowercase() == "unknown"
+                            || t.to_lowercase() == "none"
+                            || t.to_lowercase() == "not specified"
+                            || t.to_lowercase().contains("empty")
+                            || t == "0"
+                        {
+                            None
+                        } else {
+                            Some(t.to_string())
+                        }
+                    };
+
+                    if let Some(m) = clean(manufacturer_raw) {
+                        sticks.push(RamStick {
+                            manufacturer: Some(map_ram_manufacturer(&m)),
+                            part_number: clean(part_number),
+                            serial_number: clean(serial_number),
+                            speed: speed.and_then(|s| if s > 0 { Some(s) } else { None }),
+                        });
                     }
-                };
-
-                if let Some(m) = clean(manufacturer) {
-                    return (Some(m), clean(part_number), clean(serial_number));
                 }
             }
         }
     }
-    (None, None, None)
+    sticks
+}
+
+fn map_ram_manufacturer(id: &str) -> String {
+    let id_upper = id.to_uppercase();
+    if id_upper.contains("0198") {
+        "Kingston".to_string()
+    } else if id_upper.contains("04CB") {
+        "ADATA".to_string()
+    } else if id_upper.contains("00AD") || id_upper.contains("80AD") {
+        "SK Hynix".to_string()
+    } else if id_upper.contains("00CE") || id_upper.contains("80CE") {
+        "Samsung".to_string()
+    } else if id_upper.contains("012F") || id_upper.contains("812F") {
+        "Micron".to_string()
+    } else if id_upper.contains("029E") || id_upper.contains("829E") {
+        "Corsair".to_string()
+    } else if id_upper.contains("0423") || id_upper.contains("8423") {
+        "Crucial".to_string()
+    } else if id_upper.contains("059B") || id_upper.contains("859B") {
+        "Crucial".to_string()
+    } else {
+        id.to_string()
+    }
 }
 
 fn get_disk_metadata(name: &str) -> (Option<String>, Option<String>, Option<String>) {

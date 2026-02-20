@@ -82,18 +82,17 @@ pub fn print_cpu(cpus: &[crate::model::CpuInfo], thresholds: &Thresholds) {
 }
 
 pub fn print_ram(ram: &crate::model::RamInfo, thresholds: &Thresholds) {
-    println!("\n{}", "RAM Information".bold().cyan());
+    println!("\n{}", "RAM Information & Usage".bold().cyan());
     let mut table = Table::new();
     table
         .load_preset(UTF8_FULL)
         .apply_modifier(UTF8_ROUND_CORNERS)
         .set_header(vec![
-            "Type",
+            "Component",
             "Total (MiB)",
             "Used (MiB)",
             "Free (MiB)",
             "Usage (%)",
-            "Manufacturer/Part#",
         ]);
 
     let ram_usage = (ram.used as f32 / ram.total as f32) * 100.0;
@@ -105,19 +104,12 @@ pub fn print_ram(ram: &crate::model::RamInfo, thresholds: &Thresholds) {
         Color::Green
     };
 
-    let ram_details = match (&ram.manufacturer, &ram.part_number) {
-        (Some(m), Some(p)) => format!("{} ({})", m, p),
-        (Some(m), None) => m.clone(),
-        (None, _) => "Unknown (Run with sudo for DMI)".to_string(),
-    };
-
     table.add_row(vec![
         Cell::new("Main Memory"),
         Cell::new((ram.total / 1024 / 1024).to_string()),
         Cell::new((ram.used / 1024 / 1024).to_string()),
         Cell::new((ram.free / 1024 / 1024).to_string()),
         Cell::new(format!("{:.1}", ram_usage)).fg(ram_color),
-        Cell::new(ram_details),
     ]);
 
     let swap_usage = if ram.swap_total > 0 {
@@ -131,10 +123,47 @@ pub fn print_ram(ram: &crate::model::RamInfo, thresholds: &Thresholds) {
         Cell::new((ram.swap_used / 1024 / 1024).to_string()),
         Cell::new(((ram.swap_total - ram.swap_used) / 1024 / 1024).to_string()),
         Cell::new(format!("{:.1}", swap_usage)),
-        Cell::new("N/A"),
     ]);
 
     println!("{table}");
+
+    if !ram.sticks.is_empty() {
+        println!("\n{}", "Physical RAM Sticks".bold().cyan());
+        let mut stick_table = Table::new();
+        stick_table
+            .load_preset(UTF8_FULL)
+            .apply_modifier(UTF8_ROUND_CORNERS)
+            .set_header(vec![
+                "Slot",
+                "Manufacturer",
+                "Part Number",
+                "Serial Number",
+                "Speed (MT/s)",
+            ]);
+
+        for (i, stick) in ram.sticks.iter().enumerate() {
+            stick_table.add_row(vec![
+                Cell::new(format!("DIMM {}", i)),
+                Cell::new(stick.manufacturer.as_deref().unwrap_or("Unknown")),
+                Cell::new(stick.part_number.as_deref().unwrap_or("Unknown")),
+                Cell::new(stick.serial_number.as_deref().unwrap_or("Unknown")),
+                Cell::new(
+                    stick
+                        .speed
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| "N/A".to_string()),
+                ),
+            ]);
+        }
+        println!("{stick_table}");
+    } else {
+        println!(
+            "\n{}",
+            "Note: Run with sudo to see physical RAM stick details."
+                .yellow()
+                .italic()
+        );
+    }
 }
 
 pub fn print_storage(storage: &[crate::model::StorageInfo], thresholds: &Thresholds) {
