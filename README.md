@@ -4,20 +4,20 @@ A fast, lightweight, and cross-platform hardware information CLI tool written in
 
 `hwchecker` provides real-time insights into your system's hardware, system health, and peripheral devices with a professional terminal interface.
 
-## ✨ Features (v2.1)
+## ✨ Features (v1.0.0)
 
-- **📊 Comprehensive Discovery**:
-  - **CPU**: Model, physical cores, frequency, usage, and Vendor/Brand info.
-  - **RAM**: Main memory and Swap usage analysis.
-  - **Storage**: Mount points, total/used space, **Model Name**, and **Serial Number**.
-  - **Motherboard & BIOS**: Manufacturer, Product, and BIOS version/date.
-  - **Battery**: Real-time status and capacity tracking.
+- **📊 Deep Hardware Discovery**:
+  - **CPU**: Model, physical cores, frequency, usage, and **L1/L2/L3 Cache** details.
+  - **RAM**: Main memory, Swap usage, and **Multi-DIMM details** (Manufacturer, SN, Part No, Speed) using SMBIOS.
+  - **Storage**: Mount points, total/used space, **Interface (NVMe/SATA)**, Model, and Serial Number.
+  - **Motherboard & BIOS**: Full DMI/SMBIOS information (Vendor, Product, BIOS version/date).
+  - **PCI & USB**: Comprehensive device discovery with **mapped human-readable names** (via pci.ids).
   - **Network**: Interface MAC addresses and total data transferred.
-  - **USB & PCI**: Full enumeration of connected devices with Vendor/Product IDs.
   - **System Summary**: OS version, Kernel version, Hostname, and Uptime.
 - **🎨 Visual Excellence**: Professional terminal tables with semantic color coding (Green/Yellow/Red).
 - **🛠️ Customizable Thresholds**: Define your own warning and critical limits via YAML.
 - **🔍 Advanced Filtering**: Isolated views with `--cpu`, `--ram`, `--storage`, `--network`, `--usb`, `--pci`, and `--health`.
+- **🚀 All-in-one Report**: Use `--full` (or `--all`) for a complete hardware diagnostics report.
 - **🌐 Cross-platform**: Core metrics work on Linux, macOS, and Windows. Deep metadata prioritized for Linux.
 
 ## 🚀 Quick Start
@@ -33,22 +33,25 @@ cargo build --release
 ### Usage
 
 ```bash
-# Full detailed report
-cargo run -- --health --cpu --ram --storage --network --usb --pci
+# Get "full" hardware information (Linux: recommended with sudo for RAM/DMI details)
+sudo ./target/release/hw-checker --full
 
-# System health only (Motherboard & Battery)
-cargo run -- --health
+# Specific module discovery
+./target/release/hw-checker --cpu
+./target/release/hw-checker --ram
+./target/release/hw-checker --pci
 
 # Export everything to JSON
-cargo run -- --format json > report.json
+./target/release/hw-checker --full --format json > report.json
 ```
 
 ## 🛠️ Tech Stack
 
 - **sysinfo**: System metrics core.
+- **smbios-lib**: SMBIOS/DMI table parsing.
 - **rusb**: USB discovery.
-- **pci-info**: PCI enumeration.
-- **raw-cpuid**: X86 CPU features.
+- **pci-info**: PCI enumeration core.
+- **raw-cpuid**: High-fidelity CPU feature discovery.
 - **comfy-table**: Professional UI tables.
 
 ## 📄 License

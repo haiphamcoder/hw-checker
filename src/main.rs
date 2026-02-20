@@ -27,28 +27,29 @@ fn main() -> Result<()> {
             || args.network
             || args.usb
             || args.pci
-            || args.health;
+            || args.health
+            || args.full;
 
         if any_filter {
-            if args.cpu {
+            if args.cpu || args.full {
                 print_cpu(&report.cpu, &config.cpu_thresholds);
             }
-            if args.ram {
+            if args.ram || args.full {
                 print_ram(&report.ram, &config.ram_thresholds);
             }
-            if args.storage {
+            if args.storage || args.full {
                 print_storage(&report.storage, &config.storage_thresholds);
             }
-            if args.network {
+            if args.network || args.full {
                 print_network(&report.network);
             }
-            if args.usb {
+            if args.usb || args.full {
                 print_usb(&report.usb);
             }
-            if args.pci {
+            if args.pci || args.full {
                 print_pci(&report.pci);
             }
-            if args.health {
+            if args.health || args.full {
                 print_health(report.motherboard.as_ref(), &report.battery);
             }
         } else {

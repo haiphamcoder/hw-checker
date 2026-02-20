@@ -39,6 +39,10 @@ pub struct Args {
     /// Path to configuration file (YAML)
     #[arg(short, long)]
     pub config: Option<PathBuf>,
+
+    /// Show full information (all filters enabled)
+    #[arg(long, aliases = ["all"])]
+    pub full: bool,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]

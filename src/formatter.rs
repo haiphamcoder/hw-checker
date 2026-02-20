@@ -58,6 +58,9 @@ pub fn print_cpu(cpus: &[crate::model::CpuInfo], thresholds: &Thresholds) {
             "Model",
             "Vendor",
             "Frequency (MHz)",
+            "L1 Cache",
+            "L2 Cache",
+            "L3 Cache",
             "Usage (%)",
         ]);
 
@@ -75,6 +78,9 @@ pub fn print_cpu(cpus: &[crate::model::CpuInfo], thresholds: &Thresholds) {
             Cell::new(&cpu.model),
             Cell::new(&cpu.vendor_id),
             Cell::new(cpu.frequency.to_string()),
+            Cell::new(cpu.l1_cache.as_deref().unwrap_or("N/A")),
+            Cell::new(cpu.l2_cache.as_deref().unwrap_or("N/A")),
+            Cell::new(cpu.l3_cache.as_deref().unwrap_or("N/A")),
             Cell::new(format!("{:.1}", cpu.usage)).fg(usage_color),
         ]);
     }
@@ -177,6 +183,7 @@ pub fn print_storage(storage: &[crate::model::StorageInfo], thresholds: &Thresho
             "Mount",
             "FS",
             "Type",
+            "Interface",
             "Total (GiB)",
             "Used (GiB)",
             "Usage (%)",
@@ -197,6 +204,7 @@ pub fn print_storage(storage: &[crate::model::StorageInfo], thresholds: &Thresho
             Cell::new(&disk.mount_point),
             Cell::new(&disk.filesystem),
             Cell::new(disk.disk_type.as_deref().unwrap_or("Unknown")),
+            Cell::new(disk.interface.as_deref().unwrap_or("N/A")),
             Cell::new(format!(
                 "{:.1}",
                 disk.total as f64 / 1024.0 / 1024.0 / 1024.0
@@ -272,7 +280,11 @@ pub fn print_pci(pci: &[PciDevice]) {
         table.add_row(vec![
             Cell::new(&dev.slot),
             Cell::new(format!("{:04x}:{:04x}", dev.vendor_id, dev.device_id)),
-            Cell::new(dev.device_name.as_deref().unwrap_or("Unknown Device")),
+            Cell::new(format!(
+                "{} {}",
+                dev.vendor_name.as_deref().unwrap_or("Unknown"),
+                dev.device_name.as_deref().unwrap_or("Device")
+            )),
         ]);
     }
     println!("{table}");

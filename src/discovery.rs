@@ -2,10 +2,12 @@ use crate::model::{
     BatteryInfo, CpuInfo, HardwareReport, MotherboardInfo, NetworkInfo, PciDevice, RamInfo,
     RamStick, StorageInfo, UsbDevice,
 };
-use raw_cpuid::CpuId;
+use raw_cpuid::{CpuId, CpuIdReaderNative};
 use rusb::UsbContext;
 use smbioslib::table_load_from_device;
+use std::collections::HashMap;
 use std::fs;
+use std::io::{BufRead, BufReader};
 use sysinfo::{CpuRefreshKind, Disks, Networks, RefreshKind, System};
 
 pub fn get_hardware_report() -> HardwareReport {
@@ -22,7 +24,9 @@ pub fn get_hardware_report() -> HardwareReport {
 
     let cpuid = CpuId::new();
 
-    // Simpler way for cache if supported
+    // Cache discovery
+    let (l1, l2, l3) = get_cpu_caches(&cpuid);
+
     let info = cpuid.get_vendor_info();
     let vendor_name = info.as_ref().map(|v| v.as_str()).unwrap_or("Unknown");
 
@@ -36,9 +40,9 @@ pub fn get_hardware_report() -> HardwareReport {
             cores: System::physical_core_count().unwrap_or(0),
             frequency: cpu.frequency(),
             usage: cpu.cpu_usage(),
-            l1_cache: None,
-            l2_cache: None,
-            l3_cache: None,
+            l1_cache: l1.clone(),
+            l2_cache: l2.clone(),
+            l3_cache: l3.clone(),
         })
         .collect();
 
@@ -57,7 +61,7 @@ pub fn get_hardware_report() -> HardwareReport {
         .iter()
         .map(|disk| {
             let name = disk.name().to_string_lossy().to_string();
-            let (vendor, model, sn) = get_disk_metadata(&name);
+            let (vendor, model, sn, interface) = get_disk_metadata(&name);
             StorageInfo {
                 name: name.clone(),
                 mount_point: disk.mount_point().to_string_lossy().to_string(),
@@ -69,6 +73,7 @@ pub fn get_hardware_report() -> HardwareReport {
                 model_name: model,
                 serial_number: sn,
                 disk_type: Some(format!("{:?}", disk.kind())),
+                interface,
             }
         })
         .collect();
@@ -106,6 +111,44 @@ pub fn get_hardware_report() -> HardwareReport {
     }
 }
 
+fn get_cpu_caches(
+    cpuid: &CpuId<CpuIdReaderNative>,
+) -> (Option<String>, Option<String>, Option<String>) {
+    let mut l1 = None;
+    let mut l2 = None;
+    let mut l3 = None;
+
+    if let Some(cache_params) = cpuid.get_cache_parameters() {
+        for cache in cache_params {
+            // raw-cpuid levels: 1 = L1, 2 = L2, etc.
+            // associativity() etc. return raw values which might need +1 if they follow the CPUID spec literally.
+            // But let's check if we can get a cleaner value.
+            // Re-calculating with +1 only where necessary.
+            let ways = cache.associativity() as u64;
+            let partitions = cache.physical_line_partitions() as u64;
+            let line_size = cache.coherency_line_size() as u64;
+            let sets = cache.sets() as u64;
+
+            // Intel docs say: Size = (Ways + 1) * (Partitions + 1) * (LineSize + 1) * (Sets + 1)
+            // But raw-cpuid might already add them.
+            // Let's test if the values are raw.
+            // If they are raw, 66KB (ways=8+1=9?) -> 64KB should be ways=8.
+            let size_kb = (ways * partitions * line_size * sets) / 1024;
+
+            let level = cache.level();
+            let label = format!("{} KB", size_kb);
+            match level {
+                1 => l1 = Some(label),
+                2 => l2 = Some(label),
+                3 => l3 = Some(label),
+                _ => {}
+            }
+        }
+    }
+
+    (l1, l2, l3)
+}
+
 fn get_ram_details() -> Vec<RamStick> {
     let mut sticks = Vec::new();
     #[cfg(target_os = "linux")]
@@ -121,14 +164,8 @@ fn get_ram_details() -> Vec<RamStick> {
                     let part_number = format!("{}", dev.part_number());
                     let serial_number = format!("{}", dev.serial_number());
 
-                    // speed is a u16 inside the struct, let's try to get it safely
-                    // SMBiosMemoryDevice fields are usually private but accessible via methods
-                    // configured_memory_speed() returns Option<MemorySpeed> in 0.9.x
-                    // MemorySpeed is likely a wrapper of u16
                     let speed = dev.configured_memory_speed().map(|s| {
-                        // Fallback: format it and parse if we can't find a better way
                         let s_str = format!("{:?}", s);
-                        // s_str is likely "MemorySpeed(3200)" or similar
                         s_str
                             .chars()
                             .filter(|c| c.is_digit(10))
@@ -190,13 +227,17 @@ fn map_ram_manufacturer(id: &str) -> String {
     }
 }
 
-fn get_disk_metadata(name: &str) -> (Option<String>, Option<String>, Option<String>) {
+fn get_disk_metadata(
+    name: &str,
+) -> (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+) {
     #[cfg(target_os = "linux")]
     {
-        // Try to find the block device file in /sys/block/
-        // If it's a partition (e.g. nvme0n1p1 or sda1), we need the parent (nvme0n1 or sda)
         let mut parent_name = name.to_string();
-        // Simple heuristic: remove trailing digits for sda1 -> sda, but not for nvme0n1
         if name.starts_with("sd") || name.starts_with("hd") {
             parent_name = name.trim_end_matches(char::is_numeric).to_string();
         } else if name.contains('p') && name.starts_with("nvme") {
@@ -215,11 +256,19 @@ fn get_disk_metadata(name: &str) -> (Option<String>, Option<String>, Option<Stri
             .ok()
             .map(|s| s.trim().to_string());
 
-        (vendor, model, sn)
+        let interface = if parent_name.starts_with("nvme") {
+            Some("NVMe".to_string())
+        } else if parent_name.starts_with("sd") {
+            Some("SATA/SAS".to_string())
+        } else {
+            None
+        };
+
+        (vendor, model, sn, interface)
     }
     #[cfg(not(target_os = "linux"))]
     {
-        (None, None, None)
+        (None, None, None, None)
     }
 }
 
@@ -255,21 +304,93 @@ fn get_usb_devices() -> Vec<UsbDevice> {
 
 fn get_pci_devices() -> Vec<PciDevice> {
     let mut devices = Vec::new();
+    let pci_db = load_pci_db();
+
     if let Ok(pci) = pci_info::PciInfo::enumerate_pci() {
         for function_res in pci {
             if let Ok(function) = function_res {
+                let v_id = function.vendor_id();
+                let d_id = function.device_id();
+
+                let (v_name, d_name) = pci_db
+                    .get(&(v_id, d_id))
+                    .map(|(v, d)| (v.clone(), d.clone()))
+                    .unwrap_or_else(|| {
+                        let v_only = pci_db
+                            .get(&(v_id, 0xFFFF))
+                            .map(|(v, _)| (v.clone(), None))
+                            .unwrap_or((None, None));
+                        v_only
+                    });
+
                 devices.push(PciDevice {
                     slot: format!("{:?}", function.location()),
-                    vendor_id: function.vendor_id(),
-                    device_id: function.device_id(),
-                    vendor_name: None,
-                    device_name: None,
+                    vendor_id: v_id,
+                    device_id: d_id,
+                    vendor_name: v_name,
+                    device_name: d_name,
                     class_name: None,
                 });
             }
         }
     }
     devices
+}
+
+fn load_pci_db() -> HashMap<(u16, u16), (Option<String>, Option<String>)> {
+    let mut db = HashMap::new();
+    let paths = ["/usr/share/misc/pci.ids", "/var/lib/pciutils/pci.ids"];
+
+    for path in paths {
+        if let Ok(file) = fs::File::open(path) {
+            let reader = BufReader::new(file);
+            let mut current_vendor_id: Option<u16> = None;
+            let mut current_vendor_name: Option<String> = None;
+
+            for line in reader.lines().flatten() {
+                if line.trim().is_empty() || line.starts_with('#') || line.starts_with('C') {
+                    continue;
+                }
+
+                if line.starts_with("\t\t") {
+                    continue;
+                }
+
+                if line.starts_with('\t') {
+                    if let Some(v_id) = current_vendor_id {
+                        let content = line.trim();
+                        let mut parts = content.splitn(2, ' ');
+                        if let Some(id_str) = parts.next() {
+                            if let Ok(d_id) = u16::from_str_radix(id_str, 16) {
+                                if let Some(name) = parts.next() {
+                                    db.insert(
+                                        (v_id, d_id),
+                                        (
+                                            current_vendor_name.clone(),
+                                            Some(name.trim().to_string()),
+                                        ),
+                                    );
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    let mut parts = line.splitn(2, ' ');
+                    if let Some(id_str) = parts.next() {
+                        if let Ok(v_id) = u16::from_str_radix(id_str, 16) {
+                            if let Some(name) = parts.next() {
+                                current_vendor_id = Some(v_id);
+                                current_vendor_name = Some(name.trim().to_string());
+                                db.insert((v_id, 0xFFFF), (current_vendor_name.clone(), None));
+                            }
+                        }
+                    }
+                }
+            }
+            break;
+        }
+    }
+    db
 }
 
 fn get_motherboard_info() -> Option<MotherboardInfo> {

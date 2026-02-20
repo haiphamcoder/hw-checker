@@ -43,6 +43,7 @@ pub struct StorageInfo {
     pub model_name: Option<String>,
     pub serial_number: Option<String>,
     pub disk_type: Option<String>,
+    pub interface: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
