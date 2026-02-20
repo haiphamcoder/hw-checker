@@ -24,6 +24,14 @@ pub struct Args {
     #[arg(long)]
     pub network: bool,
 
+    /// Show only USB devices
+    #[arg(long)]
+    pub usb: bool,
+
+    /// Show only PCI devices
+    #[arg(long)]
+    pub pci: bool,
+
     /// Path to configuration file (YAML)
     #[arg(short, long)]
     pub config: Option<PathBuf>,

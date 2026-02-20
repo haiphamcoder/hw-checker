@@ -1,5 +1,5 @@
 use crate::config::{Config, Thresholds};
-use crate::model::HardwareReport;
+use crate::model::{HardwareReport, PciDevice, UsbDevice};
 use colored::Colorize;
 use comfy_table::modifiers::UTF8_ROUND_CORNERS;
 use comfy_table::presets::UTF8_FULL;
@@ -11,6 +11,8 @@ pub fn print_report(report: &HardwareReport, config: &Config) {
     print_ram(&report.ram, &config.ram_thresholds);
     print_storage(&report.storage, &config.storage_thresholds);
     print_network(&report.network);
+    print_usb(&report.usb);
+    print_pci(&report.pci);
 }
 
 pub fn print_summary(report: &HardwareReport) {
@@ -50,7 +52,13 @@ pub fn print_cpu(cpus: &[crate::model::CpuInfo], thresholds: &Thresholds) {
     table
         .load_preset(UTF8_FULL)
         .apply_modifier(UTF8_ROUND_CORNERS)
-        .set_header(vec!["Core", "Model", "Frequency (MHz)", "Usage (%)"]);
+        .set_header(vec![
+            "Core",
+            "Model",
+            "Vendor",
+            "Frequency (MHz)",
+            "Usage (%)",
+        ]);
 
     for (i, cpu) in cpus.iter().enumerate() {
         let usage_color = if cpu.usage > thresholds.critical {
@@ -64,6 +72,7 @@ pub fn print_cpu(cpus: &[crate::model::CpuInfo], thresholds: &Thresholds) {
         table.add_row(vec![
             Cell::new(i.to_string()),
             Cell::new(&cpu.model),
+            Cell::new(&cpu.vendor_id),
             Cell::new(cpu.frequency.to_string()),
             Cell::new(format!("{:.1}", cpu.usage)).fg(usage_color),
         ]);
@@ -128,6 +137,7 @@ pub fn print_storage(storage: &[crate::model::StorageInfo], thresholds: &Thresho
             "Name",
             "Mount",
             "FS",
+            "Type",
             "Total (GiB)",
             "Used (GiB)",
             "Usage (%)",
@@ -147,6 +157,7 @@ pub fn print_storage(storage: &[crate::model::StorageInfo], thresholds: &Thresho
             Cell::new(&disk.name),
             Cell::new(&disk.mount_point),
             Cell::new(&disk.filesystem),
+            Cell::new(disk.disk_type.as_deref().unwrap_or("Unknown")),
             Cell::new(format!(
                 "{:.1}",
                 disk.total as f64 / 1024.0 / 1024.0 / 1024.0
@@ -180,6 +191,49 @@ pub fn print_network(network: &[crate::model::NetworkInfo]) {
             Cell::new(&net.mac_address),
             Cell::new(format!("{:.2}", net.received as f64 / 1024.0 / 1024.0)),
             Cell::new(format!("{:.2}", net.transmitted as f64 / 1024.0 / 1024.0)),
+        ]);
+    }
+    println!("{table}");
+}
+
+pub fn print_usb(usb: &[UsbDevice]) {
+    if usb.is_empty() {
+        return;
+    }
+    println!("\n{}", "USB Devices".bold().cyan());
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_FULL)
+        .apply_modifier(UTF8_ROUND_CORNERS)
+        .set_header(vec!["Bus/Addr", "ID", "Manufacturer", "Product"]);
+
+    for dev in usb {
+        table.add_row(vec![
+            Cell::new(format!("{:03}/{:03}", dev.bus, dev.address)),
+            Cell::new(format!("{:04x}:{:04x}", dev.vendor_id, dev.product_id)),
+            Cell::new(dev.manufacturer.as_deref().unwrap_or("Unknown")),
+            Cell::new(dev.product.as_deref().unwrap_or("Unknown")),
+        ]);
+    }
+    println!("{table}");
+}
+
+pub fn print_pci(pci: &[PciDevice]) {
+    if pci.is_empty() {
+        return;
+    }
+    println!("\n{}", "PCI Devices".bold().cyan());
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_FULL)
+        .apply_modifier(UTF8_ROUND_CORNERS)
+        .set_header(vec!["Slot", "ID", "Name/Class"]);
+
+    for dev in pci {
+        table.add_row(vec![
+            Cell::new(&dev.slot),
+            Cell::new(format!("{:04x}:{:04x}", dev.vendor_id, dev.device_id)),
+            Cell::new(dev.device_name.as_deref().unwrap_or("Unknown Device")),
         ]);
     }
     println!("{table}");

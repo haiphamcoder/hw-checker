@@ -4,7 +4,9 @@ use hw_checker::cli::{Args, OutputFormat};
 use hw_checker::config::Config;
 use hw_checker::discovery::get_hardware_report;
 use hw_checker::exporter::export_report;
-use hw_checker::formatter::{print_cpu, print_network, print_ram, print_report, print_storage};
+use hw_checker::formatter::{
+    print_cpu, print_network, print_pci, print_ram, print_report, print_storage, print_usb,
+};
 
 fn main() -> Result<()> {
     let args = Args::parse();
@@ -18,7 +20,8 @@ fn main() -> Result<()> {
     let report = get_hardware_report();
 
     if args.format == OutputFormat::Table {
-        let any_filter = args.cpu || args.ram || args.storage || args.network;
+        let any_filter =
+            args.cpu || args.ram || args.storage || args.network || args.usb || args.pci;
 
         if any_filter {
             if args.cpu {
@@ -32,6 +35,12 @@ fn main() -> Result<()> {
             }
             if args.network {
                 print_network(&report.network);
+            }
+            if args.usb {
+                print_usb(&report.usb);
+            }
+            if args.pci {
+                print_pci(&report.pci);
             }
         } else {
             print_report(&report, &config);
