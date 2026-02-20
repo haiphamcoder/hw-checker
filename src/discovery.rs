@@ -1,8 +1,10 @@
 use crate::model::{
-    CpuInfo, HardwareReport, NetworkInfo, PciDevice, RamInfo, StorageInfo, UsbDevice,
+    BatteryInfo, CpuInfo, HardwareReport, MotherboardInfo, NetworkInfo, PciDevice, RamInfo,
+    StorageInfo, UsbDevice,
 };
 use raw_cpuid::CpuId;
 use rusb::UsbContext;
+use std::fs;
 use sysinfo::{CpuRefreshKind, Disks, Networks, RefreshKind, System};
 
 pub fn get_hardware_report() -> HardwareReport {
@@ -53,17 +55,21 @@ pub fn get_hardware_report() -> HardwareReport {
     let disks = Disks::new_with_refreshed_list();
     let storage_info = disks
         .iter()
-        .map(|disk| StorageInfo {
-            name: disk.name().to_string_lossy().to_string(),
-            mount_point: disk.mount_point().to_string_lossy().to_string(),
-            total: disk.total_space(),
-            used: disk.total_space() - disk.available_space(),
-            free: disk.available_space(),
-            filesystem: disk.file_system().to_string_lossy().to_string(),
-            vendor: None,
-            model_name: None,
-            serial_number: None,
-            disk_type: Some(format!("{:?}", disk.kind())),
+        .map(|disk| {
+            let name = disk.name().to_string_lossy().to_string();
+            let (vendor, model, sn) = get_disk_metadata(&name);
+            StorageInfo {
+                name: name.clone(),
+                mount_point: disk.mount_point().to_string_lossy().to_string(),
+                total: disk.total_space(),
+                used: disk.total_space() - disk.available_space(),
+                free: disk.available_space(),
+                filesystem: disk.file_system().to_string_lossy().to_string(),
+                vendor,
+                model_name: model,
+                serial_number: sn,
+                disk_type: Some(format!("{:?}", disk.kind())),
+            }
         })
         .collect();
 
@@ -80,6 +86,8 @@ pub fn get_hardware_report() -> HardwareReport {
 
     let usb_devices = get_usb_devices();
     let pci_devices = get_pci_devices();
+    let motherboard = get_motherboard_info();
+    let battery = get_battery_info();
 
     HardwareReport {
         os_name: System::name().unwrap_or_default(),
@@ -93,6 +101,41 @@ pub fn get_hardware_report() -> HardwareReport {
         network: network_info,
         usb: usb_devices,
         pci: pci_devices,
+        motherboard,
+        battery,
+    }
+}
+
+fn get_disk_metadata(name: &str) -> (Option<String>, Option<String>, Option<String>) {
+    #[cfg(target_os = "linux")]
+    {
+        // Try to find the block device file in /sys/block/
+        // If it's a partition (e.g. nvme0n1p1 or sda1), we need the parent (nvme0n1 or sda)
+        let mut parent_name = name.to_string();
+        // Simple heuristic: remove trailing digits for sda1 -> sda, but not for nvme0n1
+        if name.starts_with("sd") || name.starts_with("hd") {
+            parent_name = name.trim_end_matches(char::is_numeric).to_string();
+        } else if name.contains('p') && name.starts_with("nvme") {
+            if let Some(pos) = name.rfind('p') {
+                parent_name = name[..pos].to_string();
+            }
+        }
+
+        let model = fs::read_to_string(format!("/sys/block/{}/device/model", parent_name))
+            .ok()
+            .map(|s| s.trim().to_string());
+        let sn = fs::read_to_string(format!("/sys/block/{}/device/serial", parent_name))
+            .ok()
+            .map(|s| s.trim().to_string());
+        let vendor = fs::read_to_string(format!("/sys/block/{}/device/vendor", parent_name))
+            .ok()
+            .map(|s| s.trim().to_string());
+
+        (vendor, model, sn)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        (None, None, None)
     }
 }
 
@@ -103,7 +146,7 @@ fn get_usb_devices() -> Vec<UsbDevice> {
             for device in list.iter() {
                 if let Ok(desc) = device.device_descriptor() {
                     let handle = device.open();
-                    let (m_string, p_string) = if let Ok(mut h) = handle {
+                    let (m_string, p_string) = if let Ok(h) = handle {
                         let m = h.read_manufacturer_string_ascii(&desc).ok();
                         let p = h.read_product_string_ascii(&desc).ok();
                         (m, p)
@@ -143,4 +186,54 @@ fn get_pci_devices() -> Vec<PciDevice> {
         }
     }
     devices
+}
+
+fn get_motherboard_info() -> Option<MotherboardInfo> {
+    #[cfg(target_os = "linux")]
+    {
+        let read_sys = |path: &str| {
+            fs::read_to_string(format!("/sys/class/dmi/id/{}", path))
+                .map(|s| s.trim().to_string())
+                .unwrap_or_else(|_| "Unknown".to_string())
+        };
+
+        Some(MotherboardInfo {
+            vendor: read_sys("board_vendor"),
+            product: read_sys("board_name"),
+            bios_vendor: read_sys("bios_vendor"),
+            bios_version: read_sys("bios_version"),
+            bios_date: read_sys("bios_date"),
+        })
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        None
+    }
+}
+
+fn get_battery_info() -> Vec<BatteryInfo> {
+    let mut batteries = Vec::new();
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(entries) = fs::read_dir("/sys/class/power_supply/") {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.starts_with("BAT") {
+                    let status = fs::read_to_string(entry.path().join("status"))
+                        .map(|s| s.trim().to_string())
+                        .unwrap_or_else(|_| "Unknown".to_string());
+                    let capacity = fs::read_to_string(entry.path().join("capacity"))
+                        .map(|s| s.trim().parse::<u8>().unwrap_or(0))
+                        .unwrap_or(0);
+
+                    batteries.push(BatteryInfo {
+                        name,
+                        status,
+                        capacity,
+                    });
+                }
+            }
+        }
+    }
+    batteries
 }

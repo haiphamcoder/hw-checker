@@ -1,5 +1,5 @@
 use crate::config::{Config, Thresholds};
-use crate::model::{HardwareReport, PciDevice, UsbDevice};
+use crate::model::{BatteryInfo, HardwareReport, MotherboardInfo, PciDevice, UsbDevice};
 use colored::Colorize;
 use comfy_table::modifiers::UTF8_ROUND_CORNERS;
 use comfy_table::presets::UTF8_FULL;
@@ -13,6 +13,7 @@ pub fn print_report(report: &HardwareReport, config: &Config) {
     print_network(&report.network);
     print_usb(&report.usb);
     print_pci(&report.pci);
+    print_health(report.motherboard.as_ref(), &report.battery);
 }
 
 pub fn print_summary(report: &HardwareReport) {
@@ -237,4 +238,48 @@ pub fn print_pci(pci: &[PciDevice]) {
         ]);
     }
     println!("{table}");
+}
+
+pub fn print_health(motherboard: Option<&MotherboardInfo>, battery: &[BatteryInfo]) {
+    if let Some(mb) = motherboard {
+        println!("\n{}", "Motherboard & BIOS".bold().cyan());
+        let mut table = Table::new();
+        table
+            .load_preset(UTF8_FULL)
+            .apply_modifier(UTF8_ROUND_CORNERS)
+            .set_header(vec!["Component", "Information"]);
+
+        table.add_row(vec![Cell::new("Manufacturer"), Cell::new(&mb.vendor)]);
+        table.add_row(vec![Cell::new("Product"), Cell::new(&mb.product)]);
+        table.add_row(vec![Cell::new("BIOS Vendor"), Cell::new(&mb.bios_vendor)]);
+        table.add_row(vec![Cell::new("BIOS Version"), Cell::new(&mb.bios_version)]);
+        table.add_row(vec![Cell::new("BIOS Date"), Cell::new(&mb.bios_date)]);
+        println!("{table}");
+    }
+
+    if !battery.is_empty() {
+        println!("\n{}", "Battery Status".bold().cyan());
+        let mut table = Table::new();
+        table
+            .load_preset(UTF8_FULL)
+            .apply_modifier(UTF8_ROUND_CORNERS)
+            .set_header(vec!["Battery", "Status", "Capacity (%)"]);
+
+        for bat in battery {
+            let color = if bat.capacity < 20 {
+                Color::Red
+            } else if bat.capacity < 50 {
+                Color::Yellow
+            } else {
+                Color::Green
+            };
+
+            table.add_row(vec![
+                Cell::new(&bat.name),
+                Cell::new(&bat.status),
+                Cell::new(bat.capacity.to_string()).fg(color),
+            ]);
+        }
+        println!("{table}");
+    }
 }

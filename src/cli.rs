@@ -32,6 +32,10 @@ pub struct Args {
     #[arg(long)]
     pub pci: bool,
 
+    /// Show System Health (Motherboard, BIOS, Battery)
+    #[arg(long)]
+    pub health: bool,
+
     /// Path to configuration file (YAML)
     #[arg(short, long)]
     pub config: Option<PathBuf>,

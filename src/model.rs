@@ -68,6 +68,22 @@ pub struct PciDevice {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct MotherboardInfo {
+    pub vendor: String,
+    pub product: String,
+    pub bios_vendor: String,
+    pub bios_version: String,
+    pub bios_date: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct BatteryInfo {
+    pub name: String,
+    pub status: String,
+    pub capacity: u8,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct HardwareReport {
     pub os_name: String,
     pub os_version: String,
@@ -80,4 +96,6 @@ pub struct HardwareReport {
     pub network: Vec<NetworkInfo>,
     pub usb: Vec<UsbDevice>,
     pub pci: Vec<PciDevice>,
+    pub motherboard: Option<MotherboardInfo>,
+    pub battery: Vec<BatteryInfo>,
 }

@@ -2,22 +2,23 @@
 
 A fast, lightweight, and cross-platform hardware information CLI tool written in Rust.
 
-`hwchecker` provides real-time insights into your system's hardware, including CPU, RAM, Storage, and Network interfaces, with a professional and customizable terminal interface.
+`hwchecker` provides real-time insights into your system's hardware, system health, and peripheral devices with a professional terminal interface.
 
-## ✨ Features (v2.0)
+## ✨ Features (v2.1)
 
 - **📊 Comprehensive Discovery**:
-  - **CPU**: Model, physical cores, frequency, usage, and **Vendor/Brand** info.
+  - **CPU**: Model, physical cores, frequency, usage, and Vendor/Brand info.
   - **RAM**: Main memory and Swap usage analysis.
-  - **Storage**: Mount points, total/used space, filesystem types, and **Disk Kind** (SSD/HDD).
+  - **Storage**: Mount points, total/used space, **Model Name**, and **Serial Number**.
+  - **Motherboard & BIOS**: Manufacturer, Product, and BIOS version/date.
+  - **Battery**: Real-time status and capacity tracking.
   - **Network**: Interface MAC addresses and total data transferred.
-  - **USB & PCI**: Full enumeration of connected Bus/Slot devices with Vendor/Product IDs.
+  - **USB & PCI**: Full enumeration of connected devices with Vendor/Product IDs.
   - **System Summary**: OS version, Kernel version, Hostname, and Uptime.
-- **🎨 Visual Excellence**: Professional terminal tables with semantic color coding (Green/Yellow/Red) based on usage thresholds.
-- **🛠️ Highly Customizable**: Define your own warning and critical thresholds via a YAML configuration file.
-- **📁 Multiple Output Formats**: Supports `Table` (default), `JSON`, and `YAML`.
-- **🔍 Filtering**: Display only the components you care about: `--cpu`, `--ram`, `--storage`, `--network`, `--usb`, `--pci`.
-- **🌐 Cross-platform**: Supports Linux, macOS, and Windows.
+- **🎨 Visual Excellence**: Professional terminal tables with semantic color coding (Green/Yellow/Red).
+- **🛠️ Customizable Thresholds**: Define your own warning and critical limits via YAML.
+- **🔍 Advanced Filtering**: Isolated views with `--cpu`, `--ram`, `--storage`, `--network`, `--usb`, `--pci`, and `--health`.
+- **🌐 Cross-platform**: Core metrics work on Linux, macOS, and Windows. Deep metadata prioritized for Linux.
 
 ## 🚀 Quick Start
 
@@ -32,27 +33,23 @@ cargo build --release
 ### Usage
 
 ```bash
-# Full report
-cargo run -- --format table
+# Full detailed report
+cargo run -- --health --cpu --ram --storage --network --usb --pci
 
-# USB devices only
-cargo run -- --usb
+# System health only (Motherboard & Battery)
+cargo run -- --health
 
-# Export to JSON
+# Export everything to JSON
 cargo run -- --format json > report.json
 ```
 
 ## 🛠️ Tech Stack
 
-- **[sysinfo](https://crates.io/crates/sysinfo)**: System metrics.
-- **[rusb](https://crates.io/crates/rusb)**: USB discovery.
-- **[pci-info](https://crates.io/crates/pci-info)**: PCI enumeration.
-- **[raw-cpuid](https://crates.io/crates/raw-cpuid)**: X86 CPU features.
-- **[comfy-table](https://crates.io/crates/comfy-table)**: UI layout.
-
-## 🤖 CI/CD
-
-Automatic cross-platform binaries are generated on every tag push via GitHub Actions.
+- **sysinfo**: System metrics core.
+- **rusb**: USB discovery.
+- **pci-info**: PCI enumeration.
+- **raw-cpuid**: X86 CPU features.
+- **comfy-table**: Professional UI tables.
 
 ## 📄 License
 

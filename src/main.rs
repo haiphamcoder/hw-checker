@@ -5,7 +5,8 @@ use hw_checker::config::Config;
 use hw_checker::discovery::get_hardware_report;
 use hw_checker::exporter::export_report;
 use hw_checker::formatter::{
-    print_cpu, print_network, print_pci, print_ram, print_report, print_storage, print_usb,
+    print_cpu, print_health, print_network, print_pci, print_ram, print_report, print_storage,
+    print_usb,
 };
 
 fn main() -> Result<()> {
@@ -20,8 +21,13 @@ fn main() -> Result<()> {
     let report = get_hardware_report();
 
     if args.format == OutputFormat::Table {
-        let any_filter =
-            args.cpu || args.ram || args.storage || args.network || args.usb || args.pci;
+        let any_filter = args.cpu
+            || args.ram
+            || args.storage
+            || args.network
+            || args.usb
+            || args.pci
+            || args.health;
 
         if any_filter {
             if args.cpu {
@@ -41,6 +47,9 @@ fn main() -> Result<()> {
             }
             if args.pci {
                 print_pci(&report.pci);
+            }
+            if args.health {
+                print_health(report.motherboard.as_ref(), &report.battery);
             }
         } else {
             print_report(&report, &config);
